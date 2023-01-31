@@ -163,7 +163,9 @@ resource "azurerm_network_security_group" "nsg" {
   }
 }
 
-resource "azurerm_network_interface_security_group_association" "test" {
-  network_interface_id      = azurerm_network_interface.test*.id
+resource "azurerm_network_interface_security_group_association" "association" {
+  count = length(azurerm_network_interface.test)
+
+  network_interface_id      = azurerm_network_interface.test[count.index].id
   network_security_group_id = azurerm_network_security_group.nsg.id
 }

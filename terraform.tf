@@ -135,8 +135,8 @@ resource "azurerm_virtual_machine" "test" {
 
 resource "azurerm_network_security_group" "nsg" {
   name                = "ssh_nsg"
-  location            = azurerm_resource_group.example.location
-  resource_group_name = azurerm_resource_group.example.name
+  location            = azurerm_resource_group.test.location
+  resource_group_name = azurerm_resource_group.test.name
 
   security_rule {
     name                       = "allow_ssh_sg"
@@ -155,7 +155,7 @@ resource "azurerm_network_security_group" "nsg" {
     priority                   = 110
     direction                  = "Inbound"
     access                     = "Allow"
-    protocol                   = "Any"
+    protocol                   = "*"
     source_port_range          = "*"
     destination_port_range     = "80"
     source_address_prefix      = "*"
@@ -163,7 +163,7 @@ resource "azurerm_network_security_group" "nsg" {
   }
 }
 
-resource "azurerm_network_interface_security_group_association" "association" {
-  network_interface_id      = azurerm_network_interface.test.id
+resource "azurerm_network_interface_security_group_association" "test" {
+  network_interface_id      = azurerm_network_interface.test*.id
   network_security_group_id = azurerm_network_security_group.nsg.id
 }

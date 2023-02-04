@@ -49,7 +49,8 @@ resource "azurerm_network_interface" "test_cloudazure" {
   ip_configuration {
     name                          = "test_cloudazureConfiguration"
     subnet_id                     = azurerm_subnet.test_cloudazure.id
-    private_ip_address_allocation = "dynamic"
+    private_ip_address_allocation = "static"
+    public_ip_address_id = count.index == 1 ? azurerm_public_ip.public_ip.id : null
   }
 }
 
@@ -133,6 +134,8 @@ resource "azurerm_virtual_machine" "test_cloudazure" {
   }
 }
 
+#crear grupo de seguridad y reglas de firewall
+
 resource "azurerm_network_security_group" "nsg" {
   name                = "ssh_nsg"
   location            = azurerm_resource_group.test_cloudazure.location
@@ -162,7 +165,7 @@ resource "azurerm_network_security_group" "nsg" {
     destination_address_prefix = "*"
   }
 }
-
+#asociacion de grupo de seguridad con las maquinas virtuales existentes
 resource "azurerm_network_interface_security_group_association" "association" {
   count = length(azurerm_network_interface.test_cloudazure)
 

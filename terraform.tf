@@ -34,10 +34,16 @@ resource "azurerm_subnet" "test_cloudazure" {
 }
 
 resource "azurerm_public_ip" "test_cloudazure" {
-  name                = "publicIPForLB"
+  count               = 2
+  name                = "publicIP-${count.index}"
   location            = azurerm_resource_group.test_cloudazure.location
   resource_group_name = azurerm_resource_group.test_cloudazure.name
   allocation_method   = "Static"
+  sku                 = "Standard"
+
+  dns_settings {
+    domain_name_label = "machinerb${count.index}"
+  }
 }
 
 resource "azurerm_network_interface" "test_cloudazure" {
@@ -50,7 +56,8 @@ resource "azurerm_network_interface" "test_cloudazure" {
     name                          = "test_cloudazureConfiguration"
     subnet_id                     = azurerm_subnet.test_cloudazure.id
     private_ip_address_allocation = "static"
-    public_ip_address_id = count.index == 1 ? azurerm_public_ip.public_ip.id : null
+    private_ip_address            = "${cidrhost("10.0.2.0/24",  4+count.index)}"
+    public_ip_address_id          = azurerm_public_ip.test_cloudazure[count.index].id
   }
 }
 

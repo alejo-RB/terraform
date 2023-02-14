@@ -15,92 +15,154 @@ provider "azurerm" {
   features {}
 }
 
-resource "azurerm_resource_group" "test_cloudazure" {
+resource "azurerm_resource_group" "group_cloudazure" {
   name     = "Arquitectura-Cloud"
   location = "West US 3"
 }
 
 # Red Virtual
-resource "azurerm_virtual_network" "test_cloudazure" {
+resource "azurerm_virtual_network" "net_cloudazure" {
   name                = "network_vm"
   address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.test_cloudazure.location
-  resource_group_name = azurerm_resource_group.test_cloudazure.name
+  location            = azurerm_resource_group.group_cloudazure.location
+  resource_group_name = azurerm_resource_group.group_cloudazure.name
 }
 
-# SubNet
-resource "azurerm_subnet" "test_cloudazure" {
+
+# SubNet Virtual Machine
+resource "azurerm_subnet" "subnet_cloudazure" {
   name                 = "SubNet_private"
-  resource_group_name  = azurerm_resource_group.test_cloudazure.name
-  virtual_network_name = azurerm_virtual_network.test_cloudazure.name
+  resource_group_name  = azurerm_resource_group.group_cloudazure.name
+  virtual_network_name = azurerm_virtual_network.net_cloudazure.name
   address_prefixes     = ["10.0.2.0/24"]
 }
 
+#==========================================================================#
+# SubNet Base de datos
+resource "azurerm_subnet" "subet_bdd" {
+
+  address_prefixes     = ["10.0.1.0/24"]
+  name                 = "subnet-bdd"
+  resource_group_name  = azurerm_resource_group.group_cloudazure.name
+  virtual_network_name = azurerm_virtual_network.net_cloudazure.name
+  service_endpoints    = ["Microsoft.Storage"]
+
+  delegation {
+    name = "fs"
+
+    service_delegation {
+      name    = "Microsoft.DBforMySQL/flexibleServers"
+      actions = [
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+      ]
+    }
+  }
+}
+
+# Zona DNS bdd
+resource "azurerm_private_dns_zone" "dns_zone" {
+
+  name                = "bdd.alejo.mysql.database.azure.com"
+  resource_group_name = azurerm_resource_group.group_cloudazure.name
+}
+
+# Gestionar zonas DNS privadas
+resource "azurerm_private_dns_zone_virtual_network_link" "link_dns_zone" {
+
+  name                  = "mysqlVnetZoneAlejo.com"
+  private_dns_zone_name = azurerm_private_dns_zone.dns_zone.name
+  resource_group_name   = azurerm_resource_group.group_cloudazure.name
+  virtual_network_id    = azurerm_virtual_network.net_cloudazure.id
+}
+
+#Gestiona el Servidor Flexible MySQL
+resource "azurerm_mysql_flexible_server" "server_mysql" {
+
+  location                     = azurerm_resource_group.group_cloudazure.location
+  name                         = "mysqlalejo"
+  resource_group_name          = azurerm_resource_group.group_cloudazure.name
+  administrator_login          = "alejo"
+  administrator_password       = "Alejo2001."
+  backup_retention_days        = 7
+  delegated_subnet_id          = azurerm_subnet.subet_bdd.id
+  geo_redundant_backup_enabled = false
+  private_dns_zone_id          = azurerm_private_dns_zone.dns_zone.id
+  sku_name                     = "GP_Standard_D2ds_v4"
+  version                      = "8.0.21"
+  zone                         = "1"
+
+  high_availability {
+    mode                      = "ZoneRedundant"
+    standby_availability_zone = "2"
+  }
+  maintenance_window {
+    day_of_week  = 0
+    start_hour   = 8
+    start_minute = 0
+  }
+  storage {
+    iops    = 360
+    size_gb = 20
+  }
+
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.link_dns_zone]
+}
+
+# Gestiona la base de datos del Servidor Flexible MySQL
+resource "azurerm_mysql_flexible_database" "bdd_wordpress" {
+  charset             = "utf8"
+  collation           = "utf8_unicode_ci"
+  name                = "bdd_wordpress"
+  resource_group_name = azurerm_resource_group.group_cloudazure.name
+  server_name         = azurerm_mysql_flexible_server.server_mysql.name
+}
+
+#==========================================================================#
+
 # IP Publica
-resource "azurerm_public_ip" "test_cloudazure" {
+resource "azurerm_public_ip" "ip_public" {
   count               = 2
   name                = "publicIP-${count.index}"
-  location            = azurerm_resource_group.test_cloudazure.location
-  resource_group_name = azurerm_resource_group.test_cloudazure.name
+  location            = azurerm_resource_group.group_cloudazure.location
+  resource_group_name = azurerm_resource_group.group_cloudazure.name
   allocation_method   = "Static"
   sku                 = "Standard"
   domain_name_label   = "machinerb${count.index}"
 }
 
-# Servidor de Base de Datos
-resource "azurerm_mssql_server" "ServerBD" {
-  name                         = "serverbd3000"
-  location                     = azurerm_resource_group.ArquitecturaCloud.location
-  resource_group_name          = azurerm_resource_group.ArquitecturaCloud.name
-  version                      = "12.0"
-  administrator_login          = "sqladmin"
-  administrator_login_password = "SQLpassword123!"
-}
-
-# Bases de Datos
-resource "azurerm_mssql_database" "sql-db" {
-  name                 = "SQL-Database"
-  server_id            = azurerm_mssql_server.ServerBD.id
-  create_mode          = "Default"
-}
-
-resource "azurerm_mssql_database" "sql-wordpress" {
-  name                 = "Database-Wordpress"
-  server_id            = azurerm_mssql_server.ServerBD.id
-  create_mode          = "Default"
-}
-
 # Interfaz de Red
-resource "azurerm_network_interface" "test_cloudazure" {
+resource "azurerm_network_interface" "net_interface" {
   count               = 2
   name                = "net${count.index}"
-  location            = azurerm_resource_group.test_cloudazure.location
-  resource_group_name = azurerm_resource_group.test_cloudazure.name
+  location            = azurerm_resource_group.group_cloudazure.location
+  resource_group_name = azurerm_resource_group.group_cloudazure.name
 
   ip_configuration {
     name                          = "test_cloudazureConfiguration"
-    subnet_id                     = azurerm_subnet.test_cloudazure.id
+    subnet_id                     = azurerm_subnet.subnet_cloudazure.id
     private_ip_address_allocation = "static"
     private_ip_address            = cidrhost("10.0.2.0/24", 4 + count.index)
-    public_ip_address_id          = azurerm_public_ip.test_cloudazure[count.index].id
+    public_ip_address_id          = azurerm_public_ip.ip_public[count.index].id
   }
 
 }
 
-resource "azurerm_managed_disk" "test_cloudazure" {
+# Crear y administrar discos de datos
+resource "azurerm_managed_disk" "disk_cloudazure" {
   count                = 2
   name                 = "datadisk_existing_${count.index}"
-  location             = azurerm_resource_group.test_cloudazure.location
-  resource_group_name  = azurerm_resource_group.test_cloudazure.name
+  location             = azurerm_resource_group.group_cloudazure.location
+  resource_group_name  = azurerm_resource_group.group_cloudazure.name
   storage_account_type = "Standard_LRS"
   create_option        = "Empty"
   disk_size_gb         = "32"
 }
 
+# Agrupación de máquinas virtuales
 resource "azurerm_availability_set" "avset" {
   name                         = "avset"
-  location                     = azurerm_resource_group.test_cloudazure.location
-  resource_group_name          = azurerm_resource_group.test_cloudazure.name
+  location                     = azurerm_resource_group.group_cloudazure.location
+  resource_group_name          = azurerm_resource_group.group_cloudazure.name
   platform_fault_domain_count  = 2
   platform_update_domain_count = 2
   managed                      = true
@@ -113,13 +175,14 @@ variable "private_key_path" {
   default = "C:\\terraform\\keys\\private"
 }
 
+# Definir y configurar una máquina virtual 
 resource "azurerm_virtual_machine" "test_cloudazure" {
   count                 = 2
   name                  = "CMS${count.index}"
-  location              = azurerm_resource_group.test_cloudazure.location
+  location              = azurerm_resource_group.group_cloudazure.location
   availability_set_id   = azurerm_availability_set.avset.id
-  resource_group_name   = azurerm_resource_group.test_cloudazure.name
-  network_interface_ids = [element(azurerm_network_interface.test_cloudazure.*.id, count.index)]
+  resource_group_name   = azurerm_resource_group.group_cloudazure.name
+  network_interface_ids = [element(azurerm_network_interface.net_interface.*.id, count.index)]
   vm_size               = "Standard_DS1_v2"
 
   # Uncomment this line to delete the OS disk automatically when deleting the VM
@@ -152,11 +215,11 @@ resource "azurerm_virtual_machine" "test_cloudazure" {
   }
 
   storage_data_disk {
-    name            = element(azurerm_managed_disk.test_cloudazure.*.name, count.index)
-    managed_disk_id = element(azurerm_managed_disk.test_cloudazure.*.id, count.index)
+    name            = element(azurerm_managed_disk.disk_cloudazure.*.name, count.index)
+    managed_disk_id = element(azurerm_managed_disk.disk_cloudazure.*.id, count.index)
     create_option   = "Attach"
     lun             = 1
-    disk_size_gb    = element(azurerm_managed_disk.test_cloudazure.*.disk_size_gb, count.index)
+    disk_size_gb    = element(azurerm_managed_disk.disk_cloudazure.*.disk_size_gb, count.index)
   }
 
   os_profile {
@@ -175,7 +238,7 @@ resource "azurerm_virtual_machine" "test_cloudazure" {
     user        = "alejo"
     password    = "Alejo2001."
     private_key = file(var.private_key_path)
-    host        = azurerm_network_interface.test_cloudazure.id
+    host        = azurerm_network_interface.net_interface.id
   }
 
   tags = {
@@ -188,8 +251,8 @@ resource "azurerm_virtual_machine" "test_cloudazure" {
 
 resource "azurerm_network_security_group" "reglas" {
   name                = "ssh_reglas"
-  location            = azurerm_resource_group.test_cloudazure.location
-  resource_group_name = azurerm_resource_group.test_cloudazure.name
+  location            = azurerm_resource_group.group_cloudazure.location
+  resource_group_name = azurerm_resource_group.group_cloudazure.name
 
   security_rule {
     name                       = "allow_ssh_sg"
@@ -219,38 +282,36 @@ resource "azurerm_network_security_group" "reglas" {
 #asociacion de grupo de seguridad con las maquinas virtuales existentes
 resource "azurerm_network_interface_security_group_association" "association" {
 
-  count = length(azurerm_network_interface.test_cloudazure)
+  count = length(azurerm_network_interface.net_interface)
 
-  network_interface_id      = azurerm_network_interface.test_cloudazure[count.index].id
+  network_interface_id      = azurerm_network_interface.net_interface[count.index].id
   network_security_group_id = azurerm_network_security_group.reglas.id
 }
-
-#Instalación de docker y docker compose
 
 
 #Sistema de monitoreo
 #Logs por medio de consultas
-resource "azurerm_log_analytics_workspace" "test_cloudazure" {
+resource "azurerm_log_analytics_workspace" "logs_cloudazure" {
 
-  count = length(azurerm_network_interface.test_cloudazure)
+  count = length(azurerm_network_interface.net_interface)
 
   name                = "example-log-analytics-workspace-${count.index}"
-  location            = azurerm_resource_group.test_cloudazure.location
-  resource_group_name = azurerm_resource_group.test_cloudazure.name
+  location            = azurerm_resource_group.group_cloudazure.location
+  resource_group_name = azurerm_resource_group.group_cloudazure.name
 
   sku = "PerGB2018"
 }
 
 resource "azurerm_storage_account" "test_cloudazure" {
 
-  count = length(azurerm_network_interface.test_cloudazure)
+  count = length(azurerm_network_interface.net_interface)
 
   name                     = "exampleaccount${count.index}"
-  resource_group_name     = azurerm_resource_group.test_cloudazure.name
-  location                 = azurerm_resource_group.test_cloudazure.location
+  resource_group_name     = azurerm_resource_group.group_cloudazure.name
+  location                 = azurerm_resource_group.group_cloudazure.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
 }
 
 
-
+#monitor alert 

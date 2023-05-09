@@ -1,6 +1,6 @@
 # Terraform
 
-Este es un archivo .tf que automatiza el proceso de creación de maqquinas virtuales en el cloud de azure.
+This is a .tf file that automates the process of creating virtual machines in the azure cloud.
 
 
 ## 🛠 Skills
